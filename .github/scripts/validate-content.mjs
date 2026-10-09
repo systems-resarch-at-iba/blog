@@ -48,6 +48,20 @@ if (existsSync(POSTS_DIR)) {
       }
     }
 
+    const coAuthorsMatch = frontmatter.match(/^coAuthors:\s*(.*)$/m)
+    if (coAuthorsMatch) {
+      const list = coAuthorsMatch[1].match(/^\[(.*)\]$/)
+      const slugs = list ? list[1].split(',').map((item) => item.trim().replace(/^["']|["']$/g, '')) : null
+      if (!slugs || slugs.some((item) => !SLUG_PATTERN.test(item))) {
+        errors.push(`posts/${file}: coAuthors must be a list of author slugs, e.g. ["author-one", "author-two"]`)
+      } else {
+        const author = frontmatter.match(/^author:\s*["']?([^"'\s]+)/m)
+        if (author && slugs.includes(author[1])) {
+          errors.push(`posts/${file}: coAuthors lists the author "${author[1]}" again`)
+        }
+      }
+    }
+
     const statusMatch = frontmatter.match(/^status:\s*(\S+)/m)
     if (statusMatch && !['draft', 'published'].includes(statusMatch[1])) {
       errors.push(`posts/${file}: status must be "draft" or "published" (found "${statusMatch[1]}")`)

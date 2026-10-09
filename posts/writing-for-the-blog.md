@@ -46,6 +46,7 @@ What each field actually does:
 - **title**: the post's headline, shown at the top of the page and in the browser tab.
 - **date**: `YYYY-MM-DD`. Used for sorting the blog index newest first.
 - **author**: your author slug, not your display name. If you don't have one yet, ask a maintainer to add you before opening your PR; don't invent one or use someone else's.
+- **coAuthors**: optional. A list of the author slugs of everyone else who wrote the post, for example `["author-one", "author-two"]`. Each name appears in the byline and in the author box at the bottom of the post.
 - **category**: the single primary topic, shown on the post and used to group posts on the blog index. Use one of the categories already in use rather than inventing a new one for a single post; skim a couple of existing posts to see what's there.
 - **tags**: a short list of more specific keywords. There's no fixed list; use however many are actually relevant.
 - **excerpt**: the one- or two-sentence summary shown on the blog index card and used as the page's meta description. This is often the first thing someone reads before deciding to click in, so write it as an actual summary, not a placeholder.
@@ -116,6 +117,8 @@ Put the image in `images/` as `.webp`, then reference it from your post like thi
 ![A short, real description of the image](/content-images/your-image.webp)
 ```
 
+![A sample image that reads Hello, World](/content-images/hello-world.webp)
+
 Write actual alt text describing what's in the image. "Diagram" or the filename isn't a description, and it's the only version of the image some readers get.
 
 ### Lists
@@ -129,6 +132,26 @@ Ordered:
 
 1. First step
 2. Second step
+
+### Tables
+
+Separate the columns with pipes and put a row of dashes under the header. A colon in the dashes sets the alignment of a column:
+
+```markdown
+| Left aligned | Centred      | Right aligned |
+|:-------------|:------------:|--------------:|
+| First cell   | Second cell  | 1             |
+| Another cell | Another cell | 20            |
+```
+
+That renders as:
+
+| Left aligned | Centred | Right aligned |
+|:---|:---:|---:|
+| First cell | Second cell | 1 |
+| Another cell | Another cell | 20 |
+
+Right-align numeric columns so the digits line up, and keep the header cells short.
 
 ### Math
 

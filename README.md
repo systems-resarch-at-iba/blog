@@ -29,6 +29,7 @@ rendered as-is.
 | `title` | Post title |
 | `date` | `YYYY-MM-DD` |
 | `author` | Your author slug. Ask a maintainer if you don't have one yet |
+| `coAuthors` | Optional. A list of the slugs of further authors, e.g. `["author-one", "author-two"]` |
 | `category` | One of the site's existing categories (check the blog for current ones) |
 | `tags` | A short list, however many are actually relevant |
 | `excerpt` | ~160 characters, shown on the blog index and used as the meta description |
