@@ -4,133 +4,84 @@ date: "2026-08-19"
 author: muhammad-usman
 category: "Game Theory"
 tags: ["Game Theory", "Python", "Flask", "Sandboxing"]
-excerpt: "A two-part tool where students write Prisoner's Dilemma strategies, run every simulation on their own laptop, and submit only the code to a server that trusts none of it."
+excerpt: "Students write Prisoner's Dilemma strategies, test them on their own laptops, and enter a class tournament. Updated for the October 2026 version of the tool."
 status: published
 ---
 
-Axelrod's tournaments are one of those results that everyone in a game theory course hears about and almost nobody gets to reproduce. You read that Tit-for-Tat won, you nod, and you move on. We wanted the version where you actually write a strategy, watch it lose to something a classmate wrote in four lines, and go back and fix it.
+*Updated in October 2026. The app is now a one-click download, settings live inside it, and the OS Simulation averages many runs.*
 
-So we built the tool for it. You write a Python function, practice it against your own ideas and against everything your classmates have submitted, and enter your best one into a class-wide tournament. This post covers how it's put together, how to set it up, and how to write something that wins.
+Everyone in a game theory course hears that Tit-for-Tat won Axelrod's tournaments. Almost nobody gets to try it. We wanted students to write a strategy, watch it lose to something a classmate wrote in four lines, and go back and fix it. So we built a tool for that.
 
-## Why it's two programs, not one
+You write a short Python function, practise it against your own ideas and against your classmates, and enter your best one into a class tournament. This post explains how it works and how to use it.
 
-The obvious design is a single website: students paste code into a box, a server runs the tournament, everyone sees a leaderboard. We tried to cost that out and it fell apart immediately.
+## Two programs instead of one
 
-A round robin over a class of forty strategies is 780 matches, each a few hundred rounds, each round invoking two pieces of arbitrary student-written Python inside a sandbox. Run that on the free tier of a hosting service and you are asking one shared CPU to execute a few hundred thousand sandboxed calls while it is also supposed to be serving pages. Run it on a student's laptop and it finishes in seconds, on hardware that is sitting idle anyway and that we do not pay for.
+The obvious design is one website where students paste code and a server runs everything. That falls apart quickly. A round robin over forty strategies is 780 matches, each a few hundred rounds, each round running two pieces of student code in a sandbox. A free hosting plan cannot do that and serve pages at the same time. A student's laptop finishes it in seconds.
 
-So the tool is split. `ipd-app` runs on the student's machine and does every simulation. `ipd-hub` is the hosted website, and it runs no simulations at all: it handles login, submission, serving the roster of strategies, and publishing results. That split buys three things beyond the CPU bill.
+So the tool is split in two. The practice app runs on the student's computer and does every simulation. The class website runs no simulations at all. It handles logins, submissions, the list of strategies and the published results.
 
-The first is that local practice keeps working when the website is down. Nothing about writing and testing a strategy requires a network.
+This has a nice side effect. Practice keeps working when the website is down, and the website stays small enough to run for free. It also means the website must treat the app as untrusted, because anyone can change code running on their own machine. So the website checks every strategy again on its own, and the app's checks are there to catch honest mistakes early.
 
-The second is that the website stays small enough to live on a free tier permanently, because it is a CRUD app over Firestore and nothing else.
+## Getting started
 
-The third is the interesting one. Once computation lives on the student's machine, the local app is running on hardware we do not control, and it ships a shared class token so it can talk to the website. That makes it untrusted by construction. Anyone can read the token out of their own `.env` and start posting whatever they like to the API. The website therefore has to re-validate everything it receives as though the local app were an attacker, because from its point of view it is. That constraint is unpleasant to design around but it is honest, and it is a lot better than the alternative where a client-side check is quietly load-bearing.
+Students download one file from the Releases page and double click it. There is a version for Windows, Mac and Linux, and no Python install is needed. The browser opens at the app, and that is it. People who want to read the code can still clone the repository and run it with Python.
 
-## Setting it up
-
-You need Python 3.10 or newer. Everything installs into a virtual environment so the app's packages stay off the rest of your system.
-
-```bash
-git clone https://github.com/COMPUTATION-NOT-FOUND/ipd-app.git
-cd ipd-app
-
-# On a fresh Ubuntu/Debian box, first: sudo apt install -y python3-venv python3-pip
-
-python3 -m venv .venv           # Windows: py -m venv .venv
-source .venv/bin/activate       # Windows: .\.venv\Scripts\Activate.ps1
-pip install -r requirements.txt
-python app.py                   # Windows, if this hangs: waitress-serve app:app
-```
-
-Open `http://127.0.0.1:5000` and the app is running. There is no account, no database, and no configuration at this point. That is deliberate: the thing you have to do before you can write your first strategy should be as close to nothing as possible.
-
-Connecting to the class website is optional and takes two values, which your instructor gives you:
-
-```ini
-HUB_BASE_URL=https://<your-class-site>.pythonanywhere.com
-HUB_API_TOKEN=<the shared class token>
-```
-
-Copy `.env.example` to `.env` and fill those in. Without them the app still works completely, you just won't see anyone else's strategies.
+To see classmates' strategies, students open the Settings tab, paste the website address and class token from the instructor, and press Connect. The app tests the connection and remembers it, even after a new version is downloaded.
 
 ## Writing a strategy
 
-A strategy is a Python function that gets called once per round and returns `'C'` to cooperate or `'D'` to defect. Here is Tit-for-Tat, complete:
+A strategy is a function that the app calls once every round. It returns `'C'` to cooperate or `'D'` to defect. Here is Tit-for-Tat.
 
 ```python
 def tit_for_tat(last_moves, my_history, opponents_histories, meta):
-    if not last_moves:          # round 1, nothing to copy yet
+    if not last_moves:
         return 'C'
-    return last_moves[0]        # copy the opponent's last move
+    return last_moves[0]
 ```
 
-Four arguments, and the same four in every mode:
+The four inputs are the same in every game. `last_moves` holds each opponent's last move, `my_history` holds your own moves, and `opponents_histories` holds everyone else's. `meta` carries extra details, such as the round number and a random number generator.
 
-- `last_moves` is each opponent's most recent move. In a head-to-head match that's a one-element list, and it's empty on the first round.
-- `my_history` is the list of everything you've played so far.
-- `opponents_histories` is a list of lists, one full move history per opponent.
-- `meta` carries the rest: `meta['round']` (zero-indexed), `meta['n_players']`, `meta['player_index']`, `meta['tournament_info']`, and `meta['rng']`.
+That generator matters more than it looks. If you use `import random`, your results change on every run and a bug you saw once may never come back. `meta['rng']` is seeded by the run, so a random strategy still gives the same result for the same seed.
 
-That last key is worth explaining. If you write `import random` and call `random.random()`, your strategy behaves differently every time it runs, which means a result you got five minutes ago cannot be reproduced and a bug you hit once may never appear again. `meta['rng']` is a `random.Random` seeded by the tournament, so a randomized strategy is still fully deterministic given the same seed. Use it and every run is reproducible. Ignore it and you are debugging by folklore.
+```python
+def generous_tit_for_tat(last_moves, my_history, opponents_histories, meta):
+    if not last_moves or last_moves[0] == 'C':
+        return 'C'
+    if meta['rng'].random() < 0.1:
+        return 'C'
+    return 'D'
+```
 
-Two rules the sandbox enforces. Your function name has to match the strategy name you enter in the app, so a strategy called `Grudger` must be `def Grudger(...)`. And you must return the string `'C'` or `'D'`, not `1`, not `True`, not `None`. Returning nothing is by far the most common first mistake, usually because a branch falls off the end of the function.
-
-Beyond that, file access, networking, `exec`, `eval` and `open` are blocked, and every call runs under an instruction cap so an accidental infinite loop stalls one round rather than the whole tournament.
+The name you give a strategy in the app is only a label, so "Grim Trigger" with a space is fine. The one hard rule is to return exactly `'C'` or `'D'`. A strategy that returns anything else, crashes or loops forever loses that match, and the results say which strategy failed and why. The app's README has a small example for every field of `meta`, and a short PDF guide comes with each release.
 
 ## Three games, one function
 
-The same function you just wrote plays three different games without modification, and that is the part of the design that turned out to be most fun to teach.
+The same function plays three different games.
 
-**1v1** is Axelrod's format: round robin, every strategy against every other, head to head. This is where the classic results reproduce, and where students first discover that a strategy which never defects gets eaten alive and a strategy which always defects gets nothing from anyone.
+**1v1** is Axelrod's format. Every strategy plays every other one. This is where students learn that always cooperating gets you eaten and always defecting leaves you with nothing.
 
-**N-Player** puts everyone in one group and has them all move simultaneously, which breaks the intuitions built in 1v1. There is no single opponent to retaliate against, so "copy their last move" stops meaning anything obvious, and you have to decide what to do with `opponents_histories` yourself. Three payoff models are available: Public Goods, where cooperators pay into a pot that gets multiplied and split evenly; Pairwise Matrix, which decomposes the group into every pair and sums the ordinary two-player payoffs; and a K-Cooperator tensor, where your payoff depends on exactly how many of the others cooperated.
+**N-Player** puts everyone in one group moving at once. There is no single opponent to copy, so students have to decide what to do with a whole list of moves. You can choose how the group is paid, for example a public goods game where cooperators pay into a shared pot.
 
-**OS Simulation** reinterprets the same function as a CPU scheduler. Cooperating means yielding the processor, defecting means holding onto it, and your strategy is scored on how well it runs a simulated multi-core machine against the metrics an operating systems course actually cares about. It is the same two-move decision, and a strategy that was a decent citizen in the 1v1 tournament is often a terrible scheduler, which is a more interesting result than it first sounds.
+**OS Simulation** turns the function into a CPU scheduler. Cooperating means giving up the processor and defecting means holding on to it. A strategy that was a good citizen in 1v1 often turns out to be a poor scheduler, which surprises people.
 
-![OS simulation results: a metrics table listing throughput, wait, turnaround, response, makespan and cache misses for two strategies against a plain Round Robin baseline, three comparison charts, a radar plot of the normalised metrics, and a per-core timeline strip showing which core was busy on each tick.](/content-images/ipd-os-simulation.webp)
+![The 1v1 results panel with ranking weight sliders, a leaderboard of four strategies, a weighted score bar chart, a points against cooperation scatter plot, a radar chart and a head-to-head grid where draws are marked with an equals sign.](/content-images/ipd-1v1-results-v2.webp)
 
-## How scoring works
+## Making the results fair
 
-Ranking strategies by raw points rewards whoever happened to play the most rounds, so the leaderboard uses a weighted score:
+Ranking by raw points rewards whoever played the most rounds, so the leaderboard uses a weighted score made of win rate, cooperation and average points per round. Each part is scaled between 0 and 1 first, so a longer match never helps. Sliders let you change the weights and watch the ranking move, which shows quickly that "best" depends on what you measure.
 
-$$
-\text{Score} = \left(r_{\text{win}} W_{\text{win}} + c \, W_{\text{coop}} + p \, W_{\text{points}}\right) \times 100
-$$
+The OS Simulation needed more care. Each run makes up a random set of tasks, and one run can be lucky. So each strategy now runs ten times on different task sets, and every number comes with a plus or minus range. If two strategies' ranges overlap, neither is clearly better, and the page says so. The app also warns when the simulated computer has more work than its cores can handle, because then the waiting times say more about the workload than about the scheduler.
 
-The three components default to weights of roughly a third each, and every one of them is normalized before it is weighted. $r_{\text{win}}$ is wins divided by games played, not wins outright. $c$ is cooperation as a fraction of your own moves. $p$ is your average points per round divided by the maximum payoff available in a single round, capped at 1.
+![OS Simulation results averaged over ten runs, with a plus or minus range next to every metric, a warning that the cores cannot keep up in three workloads, and charts comparing four strategies with a plain Round Robin baseline.](/content-images/ipd-os-simulation-v2.webp)
 
-The normalization is the whole point. Win rate is per opponent and points are per round, so playing a longer match or facing more opponents cannot inflate your position. Two strategies that behave identically rank identically regardless of how much of the tournament they saw.
+## Practising and submitting
 
-The weights are adjustable with sliders on the results page, and the leaderboard re-sorts live. That is not a gimmick. Sliding cooperation to zero and watching a well-behaved strategy fall twelve places makes the point that "best" is a choice about what you are measuring, and it makes it faster than any lecture does.
+Refresh Gallery pulls every submitted strategy from the website. Students tick the ones they want to face, and the list is saved so practice works offline. A strategy from the Hub tab can be opened straight into the editor. For code you did not write, sandbox mode runs each strategy in a separate process first and leaves out anything that hangs or crashes.
 
-![The 1v1 results panel: three ranking-weight sliders above a leaderboard of four strategies, a weighted-score bar chart, a points-versus-cooperation scatter plot, a radar chart comparing the four on win rate, points and cooperation, and a head-to-head grid showing AlwaysDefect beating all three others while the rest draw with each other.](/content-images/ipd-1v1-results.webp)
-
-## Practicing against the class
-
-Under Select Participants, the app shows every strategy it has fetched from the website, split into three groups: Players, which are classmates' submissions; Bots, which the instructor wrote; and Practice, which are worked examples. Tick whichever you want to face and run. Their code is read-only, so you compete against them without being able to edit them.
-
-The roster is cached on disk after the first fetch, so once you have pulled it, practice keeps working on a train with no signal. Press Refresh Gallery when you want the latest.
-
-There is no cap on how many strategies you add to a run. If a run is going to be large the app estimates the time before starting it, on the theory that a number up front is better than a spinner and a guess.
-
-## Submitting
-
-Submission goes through the Hub tab, and the first thing that happens is that your own machine tries to reject your strategy. The local app screens the code with the same AST-based check the server uses, then runs it in a short test match against a fixed opponent. An illegal import, a name that doesn't match the function, a crash on round one, a branch that returns `None`: all of it surfaces locally, in about a second, with an error that tells you which of those it was.
-
-Only after both checks pass does the app hand off to the website, opening the submission page with your strategy prefilled. You log in there and confirm. Login and submission happen on the website, never in the local app, which is why the local app holds no credentials at all.
-
-The website then re-screens everything anyway. Not as a backup, but because it has to: the local check runs on a machine the student controls and can be bypassed by anyone willing to spend ten minutes on it. The server-side screen is the one that counts, and it runs on every path that ingests code, including the admin ones. The local check exists purely so that honest mistakes fail fast and close to the person who made them.
-
-Strategy names have to be unique across the class, since the results page identifies entries by name.
+Submitting starts on the student's own machine. The app checks the code and plays a short test match, so mistakes show up in about a second. Then the class website opens with the strategy filled in, and the student logs in to confirm. The website checks the code again before saving it.
 
 ## For instructors
 
-Running the official tournament is the same practice flow with the real roster, followed by Submit results to website. That stages the result on the server and opens a review page where you publish immediately or schedule a reveal time, which is useful when you want everyone to see the standings at once rather than whenever the run finished. Any strategies that existed only on your machine get registered as bots on publish, deduplicated by a hash of their code so re-running a tournament doesn't create duplicates.
+The official tournament runs in the app with the real roster. Submit results sends it to the website as a draft, and you publish it right away or schedule a reveal time. Bots and practice strategies are managed on the website, which can also download every submitted strategy as a ZIP file for safekeeping.
 
-Bots and practice strategies are managed from the admin dashboard on the website.
-
-## Where the code is
-
-Both halves are Flask. `ipd-app` holds the engine: the round robin, the N-player simulation, the payoff models, the OS scheduler simulation, and the sandbox. `ipd-hub` is Firebase-backed and holds every secret; the local app has none, and its `firebase_config.py` and `auth_utils.py` are deliberately no-op stubs so that the hosted code paths cannot accidentally come alive on a student's laptop.
-
-If you're setting this up for your own course, the piece worth stealing is the split rather than the simulation. Pushing computation to the client and treating the client as hostile is more work than trusting it, but it is the only version that stays free to run and honest about what it is checking.
+If you want to run this for your own course, the part worth copying is the split. Pushing the work to the students' machines and treating them as untrusted is more effort than trusting them, but it stays free to run and honest about what it checks.
